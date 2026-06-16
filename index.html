@@ -237,6 +237,18 @@
       color: var(--cream);
     }
 
+    .tile-live-badge {
+      position: absolute;
+      top: .5rem; left: .6rem;
+      font-size: .32rem;
+      letter-spacing: .18em;
+      color: #000;
+      background: var(--tile-color, var(--amber));
+      padding: .18rem .4rem;
+      border-radius: 2px;
+      opacity: .9;
+    }
+
     /* ── footer ── */
     footer {
       position: relative; z-index: 1;
@@ -368,7 +380,47 @@
   })();
 
   // ── game data ──────────────────────────────────────────────────────────────
+  const MOCKY_BIRD_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="56" height="56">
+    <!-- body -->
+    <ellipse cx="32" cy="38" rx="18" ry="16" fill="#f5c842"/>
+    <!-- head -->
+    <circle cx="32" cy="22" r="14" fill="#f5c842"/>
+    <!-- belly -->
+    <ellipse cx="32" cy="40" rx="11" ry="10" fill="#fde98a"/>
+    <!-- left wing -->
+    <ellipse cx="13" cy="38" rx="7" ry="11" fill="#e0a800" transform="rotate(-20 13 38)"/>
+    <!-- right wing -->
+    <ellipse cx="51" cy="38" rx="7" ry="11" fill="#e0a800" transform="rotate(20 51 38)"/>
+    <!-- tail -->
+    <ellipse cx="32" cy="53" rx="6" ry="5" fill="#e0a800"/>
+    <!-- left eye white -->
+    <circle cx="25" cy="20" r="5.5" fill="white"/>
+    <!-- right eye white -->
+    <circle cx="39" cy="20" r="5.5" fill="white"/>
+    <!-- left pupil -->
+    <circle cx="26" cy="20" r="3" fill="#222"/>
+    <!-- right pupil -->
+    <circle cx="40" cy="20" r="3" fill="#222"/>
+    <!-- eye shine left -->
+    <circle cx="27" cy="18.5" r="1.2" fill="white"/>
+    <!-- eye shine right -->
+    <circle cx="41" cy="18.5" r="1.2" fill="white"/>
+    <!-- smug brow left (angled inward) -->
+    <line x1="21" y1="13" x2="29" y2="16" stroke="#c47a00" stroke-width="2.2" stroke-linecap="round"/>
+    <!-- smug brow right -->
+    <line x1="43" y1="13" x2="35" y2="16" stroke="#c47a00" stroke-width="2.2" stroke-linecap="round"/>
+    <!-- beak -->
+    <polygon points="32,26 27,30 37,30" fill="#ff9900"/>
+    <!-- smug mouth -->
+    <path d="M27 32 Q32 35 37 32" stroke="#c47a00" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+    <!-- blush left -->
+    <ellipse cx="20" cy="26" rx="4" ry="2.5" fill="#ffb347" opacity="0.45"/>
+    <!-- blush right -->
+    <ellipse cx="44" cy="26" rx="4" ry="2.5" fill="#ffb347" opacity="0.45"/>
+  </svg>`;
+
   const games = [
+    { id:'mockybird',   name:'MOCKY BIRD',        icon:'🦜', customIcon: MOCKY_BIRD_SVG, genre:'RAGE INDUCING', color:'#c47a5a', hi:3, url:'https://nalostta.github.io/mocky_bird/', live:true },
     { id:'snake',        name:'SNAKE',           icon:'🐍', genre:'CLASSIC',     color:'#7ab87a', hi:8320   },
     { id:'tetris',       name:'TETRIS',           icon:'🧩', genre:'PUZZLE',      color:'#4ecdc4', hi:124500 },
     { id:'pacman',       name:'PAC-MAN',          icon:'👾', genre:'MAZE',        color:'#e8a020', hi:99990  },
@@ -391,15 +443,17 @@
 
   games.forEach(g => {
     const a = document.createElement('a');
-    a.href = `game.html?id=${g.id}&name=${encodeURIComponent(g.name)}&icon=${encodeURIComponent(g.icon)}&color=${encodeURIComponent(g.color)}`;
+    a.href = g.url || `game.html?id=${g.id}&name=${encodeURIComponent(g.name)}&icon=${encodeURIComponent(g.icon)}&color=${encodeURIComponent(g.color)}`;
+    if (g.url) a.target = '_blank';
     a.className = 'tile';
     a.style.setProperty('--tile-color', g.color);
     a.innerHTML = `
-      <div class="tile-icon">${g.icon}</div>
+      ${g.live ? '<div class="tile-live-badge">● LIVE</div>' : ''}
+      <div class="tile-icon">${g.customIcon || g.icon}</div>
       <div class="tile-name">${g.name}</div>
       <div class="tile-genre">${g.genre}</div>
       <div class="tile-score">HI-SCORE &nbsp;<span>${g.hi.toLocaleString()}</span></div>
-      <div class="tile-btn">PLAY NOW</div>
+      <div class="tile-btn">${g.live ? 'PLAY NOW' : 'COMING SOON'}</div>
     `;
     grid.appendChild(a);
   });
