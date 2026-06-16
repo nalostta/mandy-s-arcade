@@ -279,6 +279,58 @@
     .light:nth-child(7) { animation-delay: 1.68s; }
 
     /* ── animations ── */
+    /* ── game modal ── */
+    .game-modal {
+      display: none;
+      position: fixed; inset: 0;
+      z-index: 1000;
+      background: rgba(6,6,10,.92);
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 1rem;
+    }
+    .game-modal.open { display: flex; }
+
+    .modal-bar {
+      width: 100%;
+      max-width: 960px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: .5rem .8rem;
+      background: #1a180e;
+      border: 1px solid #3a3020;
+      border-bottom: none;
+      border-radius: 4px 4px 0 0;
+    }
+    .modal-title {
+      font-size: .5rem;
+      color: var(--amber);
+      letter-spacing: .15em;
+    }
+    .modal-close {
+      font-family: 'Press Start 2P', monospace;
+      font-size: .45rem;
+      background: transparent;
+      border: 1px solid #554030;
+      color: #c4947a;
+      padding: .35rem .7rem;
+      cursor: pointer;
+      letter-spacing: .1em;
+      transition: background .15s, color .15s;
+    }
+    .modal-close:hover { background: #3a1a0e; color: var(--cream); }
+
+    .modal-frame {
+      width: 100%;
+      max-width: 960px;
+      height: min(75vh, 600px);
+      border: 1px solid #3a3020;
+      border-radius: 0 0 4px 4px;
+      background: #000;
+    }
+
     @keyframes marquee {
       from { transform: translateX(100vw); }
       to   { transform: translateX(-100%); }
@@ -330,6 +382,15 @@
 <p class="section-label">── SELECT YOUR GAME ──</p>
 
 <main class="grid" id="gameGrid"></main>
+
+<!-- game modal -->
+<div class="game-modal" id="gameModal">
+  <div class="modal-bar">
+    <span class="modal-title" id="modalTitle">GAME</span>
+    <button class="modal-close" id="modalClose">✕ EXIT</button>
+  </div>
+  <iframe class="modal-frame" id="modalFrame" src="" allowfullscreen></iframe>
+</div>
 
 <footer>
   <div class="lights">
@@ -441,10 +502,31 @@
 
   const grid = document.getElementById('gameGrid');
 
+  const modal      = document.getElementById('gameModal');
+  const modalFrame = document.getElementById('modalFrame');
+  const modalTitle = document.getElementById('modalTitle');
+  const modalClose = document.getElementById('modalClose');
+
+  function openModal(name, url) {
+    modalTitle.textContent = name;
+    modalFrame.src = url;
+    modal.classList.add('open');
+    document.body.style.overflow = 'hidden';
+  }
+  function closeModal() {
+    modal.classList.remove('open');
+    modalFrame.src = '';
+    document.body.style.overflow = '';
+  }
+
+  modalClose.addEventListener('click', closeModal);
+  modal.addEventListener('click', e => { if (e.target === modal) closeModal(); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+
   games.forEach(g => {
     const a = document.createElement('a');
-    a.href = g.url || `game.html?id=${g.id}&name=${encodeURIComponent(g.name)}&icon=${encodeURIComponent(g.icon)}&color=${encodeURIComponent(g.color)}`;
-    if (g.url) a.target = '_blank';
+    const fallbackHref = `game.html?id=${g.id}&name=${encodeURIComponent(g.name)}&icon=${encodeURIComponent(g.icon)}&color=${encodeURIComponent(g.color)}`;
+    a.href = g.live ? '#' : fallbackHref;
     a.className = 'tile';
     a.style.setProperty('--tile-color', g.color);
     a.innerHTML = `
@@ -455,6 +537,9 @@
       <div class="tile-score">HI-SCORE &nbsp;<span>${g.hi.toLocaleString()}</span></div>
       <div class="tile-btn">${g.live ? 'PLAY NOW' : 'COMING SOON'}</div>
     `;
+    if (g.live && g.url) {
+      a.addEventListener('click', e => { e.preventDefault(); openModal(g.name, g.url); });
+    }
     grid.appendChild(a);
   });
 </script>
