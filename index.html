@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MANDY'S ARCADE</title>
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --amber:   #e8a020;
+      --teal:    #4ecdc4;
+      --rose:    #c4647a;
+      --cream:   #f0e4c8;
+      --purple:  #9b7fc4;
+      --sage:    #7ab87a;
+      --bg:      #111008;
+      --panel:   #1a180e;
+      --border:  #2e2a1a;
+    }
+
+    html, body {
+      min-height: 100%;
+      background: var(--bg);
+      color: #d4c9aa;
+      font-family: 'Press Start 2P', monospace;
+      overflow-x: hidden;
+    }
+
+    /* subtle grain texture */
+    body::before {
+      content: '';
+      position: fixed; inset: 0;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");
+      pointer-events: none;
+      z-index: 998;
+      opacity: .6;
+    }
+
+    /* soft scanlines */
+    body::after {
+      content: '';
+      position: fixed; inset: 0;
+      background: repeating-linear-gradient(
+        0deg,
+        transparent,
+        transparent 3px,
+        rgba(0,0,0,.06) 3px,
+        rgba(0,0,0,.06) 4px
+      );
+      pointer-events: none;
+      z-index: 999;
+    }
+
+    /* ── starfield ── */
+    #stars {
+      position: fixed; inset: 0;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    /* ── marquee ── */
+    .marquee-bar {
+      background: #2a220e;
+      border-bottom: 2px solid var(--amber);
+      color: var(--amber);
+      font-size: .5rem;
+      letter-spacing: .18em;
+      padding: .45rem 0;
+      overflow: hidden;
+      white-space: nowrap;
+    }
+    .marquee-bar span {
+      display: inline-block;
+      animation: marquee 22s linear infinite;
+      opacity: .85;
+    }
+
+    /* ── header ── */
+    header {
+      position: relative;
+      z-index: 1;
+      text-align: center;
+      padding: 2.8rem 1rem 1.4rem;
+    }
+
+    .logo {
+      display: inline-block;
+      font-size: clamp(1.4rem, 4.5vw, 2.8rem);
+      letter-spacing: .08em;
+      color: var(--amber);
+      text-shadow: 0 0 12px rgba(232,160,32,.4), 2px 2px 0 #5a3a00;
+      animation: logoBreath 8s ease-in-out infinite;
+    }
+
+    .logo .sub {
+      display: block;
+      font-size: clamp(.42rem, 1.2vw, .7rem);
+      color: var(--teal);
+      text-shadow: 0 0 8px rgba(78,205,196,.25);
+      margin-top: .9rem;
+      letter-spacing: .25em;
+      opacity: .8;
+    }
+
+    .insert-coin {
+      margin-top: 1.4rem;
+      font-size: .55rem;
+      color: var(--cream);
+      animation: blink 1.3s step-end infinite;
+      opacity: .7;
+    }
+
+    .hud {
+      display: flex;
+      justify-content: center;
+      gap: 2rem;
+      margin-top: 1.2rem;
+      font-size: .45rem;
+      color: #6a6040;
+    }
+    .hud span { color: var(--amber); }
+
+    /* ── divider ── */
+    .divider {
+      border: none;
+      height: 1px;
+      background: linear-gradient(90deg, transparent, var(--amber), var(--teal), transparent);
+      margin: 1.6rem auto;
+      max-width: 700px;
+      opacity: .4;
+    }
+
+    /* ── section label ── */
+    .section-label {
+      text-align: center;
+      font-size: .5rem;
+      color: #7a6a4a;
+      letter-spacing: .3em;
+      margin-bottom: 2rem;
+      position: relative; z-index: 1;
+    }
+
+    /* ── grid ── */
+    .grid {
+      position: relative; z-index: 1;
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+      gap: 1.2rem;
+      max-width: 1200px;
+      margin: 0 auto 4rem;
+      padding: 0 1.5rem;
+    }
+
+    /* ── tile ── */
+    .tile {
+      background: var(--panel);
+      border: 1px solid color-mix(in srgb, var(--tile-color, var(--amber)) 40%, #2e2a1a);
+      border-radius: 4px;
+      padding: 1.3rem 1.2rem 1.1rem;
+      cursor: pointer;
+      text-decoration: none;
+      color: inherit;
+      display: flex;
+      flex-direction: column;
+      gap: .7rem;
+      position: relative;
+      overflow: hidden;
+      transition: transform .2s, box-shadow .2s, border-color .2s;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,.04);
+    }
+
+    /* top tint */
+    .tile::before {
+      content: '';
+      position: absolute; top: 0; left: 0; right: 0; height: 60px;
+      background: linear-gradient(180deg, color-mix(in srgb, var(--tile-color,var(--amber)) 8%, transparent), transparent);
+      pointer-events: none;
+    }
+
+    .tile:hover {
+      transform: translateY(-4px);
+      border-color: color-mix(in srgb, var(--tile-color, var(--amber)) 70%, #2e2a1a);
+      box-shadow: 0 6px 20px rgba(0,0,0,.4), 0 0 12px color-mix(in srgb, var(--tile-color,var(--amber)) 25%, transparent);
+    }
+    .tile:hover .tile-icon { animation: iconBounce .35s ease; }
+
+    /* corner pip */
+    .tile::after {
+      content: '';
+      position: absolute; top: 0; right: 0;
+      border-style: solid;
+      border-width: 0 16px 16px 0;
+      border-color: transparent color-mix(in srgb, var(--tile-color,var(--amber)) 50%, #2e2a1a) transparent transparent;
+    }
+
+    .tile-icon { font-size: 2.4rem; line-height: 1; }
+
+    .tile-name {
+      font-size: .6rem;
+      color: var(--cream);
+      letter-spacing: .05em;
+      line-height: 1.6;
+      opacity: .9;
+    }
+
+    .tile-genre {
+      font-size: .38rem;
+      color: color-mix(in srgb, var(--tile-color,var(--amber)) 75%, #888);
+      letter-spacing: .2em;
+    }
+
+    .tile-score {
+      font-size: .37rem;
+      color: #4a4030;
+      margin-top: auto;
+    }
+    .tile-score span { color: var(--amber); opacity: .75; }
+
+    .tile-btn {
+      font-family: 'Press Start 2P', monospace;
+      font-size: .42rem;
+      background: transparent;
+      border: 1px solid color-mix(in srgb, var(--tile-color,var(--amber)) 45%, #333);
+      color: color-mix(in srgb, var(--tile-color,var(--amber)) 80%, #ccc);
+      padding: .5rem .8rem;
+      letter-spacing: .15em;
+      cursor: pointer;
+      transition: background .15s, color .15s;
+      width: 100%;
+      text-align: center;
+    }
+    .tile:hover .tile-btn {
+      background: color-mix(in srgb, var(--tile-color,var(--amber)) 20%, transparent);
+      border-color: var(--tile-color,var(--amber));
+      color: var(--cream);
+    }
+
+    /* ── footer ── */
+    footer {
+      position: relative; z-index: 1;
+      text-align: center;
+      font-size: .38rem;
+      color: #3a3020;
+      padding: 2rem 1rem 3rem;
+      border-top: 1px solid var(--border);
+      letter-spacing: .12em;
+    }
+    .lights {
+      display: flex;
+      justify-content: center;
+      gap: .6rem;
+      margin-bottom: 1rem;
+    }
+    .light {
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      animation: lightCycle 2s steps(1) infinite;
+      opacity: .7;
+    }
+    .light:nth-child(2) { animation-delay: .28s; }
+    .light:nth-child(3) { animation-delay: .56s; }
+    .light:nth-child(4) { animation-delay: .84s; }
+    .light:nth-child(5) { animation-delay: 1.12s; }
+    .light:nth-child(6) { animation-delay: 1.4s; }
+    .light:nth-child(7) { animation-delay: 1.68s; }
+
+    /* ── animations ── */
+    @keyframes marquee {
+      from { transform: translateX(100vw); }
+      to   { transform: translateX(-100%); }
+    }
+    @keyframes logoBreath {
+      0%,100% { text-shadow: 0 0 12px rgba(232,160,32,.4), 2px 2px 0 #5a3a00; }
+      50%      { text-shadow: 0 0 22px rgba(232,160,32,.6), 2px 2px 0 #5a3a00; }
+    }
+    @keyframes blink { 50% { opacity: 0; } }
+    @keyframes iconBounce {
+      0%,100% { transform: translateY(0); }
+      50%      { transform: translateY(-5px); }
+    }
+    @keyframes lightCycle {
+      0%   { background: var(--amber);  }
+      14%  { background: var(--rose);   }
+      28%  { background: var(--cream);  }
+      42%  { background: var(--teal);   }
+      57%  { background: var(--sage);   }
+      71%  { background: var(--purple); }
+      85%  { background: var(--amber);  }
+    }
+  </style>
+</head>
+<body>
+
+<canvas id="stars"></canvas>
+
+<div class="marquee-bar">
+  <span>
+    ✦ MANDY'S ARCADE ✦ &nbsp;&nbsp; HIGH SCORE: 999999 &nbsp;&nbsp; ✦ INSERT COIN ✦ &nbsp;&nbsp; PLAYER 1 READY &nbsp;&nbsp; ✦ MANDY'S ARCADE ✦ &nbsp;&nbsp; HIGH SCORE: 999999 &nbsp;&nbsp; ✦ INSERT COIN ✦ &nbsp;&nbsp; PLAYER 1 READY &nbsp;&nbsp; ✦ MANDY'S ARCADE ✦
+  </span>
+</div>
+
+<header>
+  <div class="logo">
+    MANDY'S ARCADE
+    <span class="sub">— CLASSIC &amp; BEYOND —</span>
+  </div>
+  <p class="insert-coin">▶ INSERT COIN TO PLAY ◀</p>
+  <div class="hud">
+    <div>CREDITS &nbsp;<span>03</span></div>
+    <div>HI-SCORE &nbsp;<span>999999</span></div>
+    <div>PLAYER &nbsp;<span>1UP</span></div>
+  </div>
+</header>
+
+<hr class="divider" />
+<p class="section-label">── SELECT YOUR GAME ──</p>
+
+<main class="grid" id="gameGrid"></main>
+
+<footer>
+  <div class="lights">
+    <div class="light"></div><div class="light"></div><div class="light"></div>
+    <div class="light"></div><div class="light"></div><div class="light"></div>
+    <div class="light"></div>
+  </div>
+  © MANDY'S ARCADE 2026 &nbsp;·&nbsp; ALL RIGHTS RESERVED &nbsp;·&nbsp; PLAY RESPONSIBLY
+</footer>
+
+<script>
+  // ── starfield (warm tones) ─────────────────────────────────────────────────
+  (function(){
+    const canvas = document.getElementById('stars');
+    const ctx = canvas.getContext('2d');
+    let stars = [];
+
+    function resize(){
+      canvas.width  = window.innerWidth;
+      canvas.height = document.body.scrollHeight;
+      stars = Array.from({length: 100}, () => ({
+        x: Math.random() * canvas.width,
+        y: Math.random() * canvas.height,
+        r: Math.random() * 1.1 + .25,
+        phase: Math.random() * Math.PI * 2,
+        speed: Math.random() * .012 + .003,
+        warm: Math.random() > .5,
+      }));
+    }
+
+    function draw(t){
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      stars.forEach(s => {
+        const alpha = .08 + .35 * (.5 + .5 * Math.sin(t * s.speed + s.phase));
+        ctx.beginPath();
+        ctx.arc(s.x, s.y, s.r, 0, Math.PI*2);
+        ctx.fillStyle = s.warm
+          ? `rgba(232,190,120,${alpha})`
+          : `rgba(180,200,220,${alpha})`;
+        ctx.fill();
+      });
+      requestAnimationFrame(draw);
+    }
+
+    window.addEventListener('resize', resize);
+    resize();
+    requestAnimationFrame(draw);
+  })();
+
+  // ── game data ──────────────────────────────────────────────────────────────
+  const games = [
+    { id:'snake',        name:'SNAKE',           icon:'🐍', genre:'CLASSIC',     color:'#7ab87a', hi:8320   },
+    { id:'tetris',       name:'TETRIS',           icon:'🧩', genre:'PUZZLE',      color:'#4ecdc4', hi:124500 },
+    { id:'pacman',       name:'PAC-MAN',          icon:'👾', genre:'MAZE',        color:'#e8a020', hi:99990  },
+    { id:'spaceinvaders',name:'SPACE INVADERS',   icon:'🛸', genre:'SHOOTER',     color:'#c4647a', hi:55160  },
+    { id:'pong',         name:'PONG',             icon:'🏓', genre:'SPORTS',      color:'#9b7fc4', hi:21     },
+    { id:'breakout',     name:'BREAKOUT',         icon:'🧱', genre:'ACTION',      color:'#c49a4e', hi:43220  },
+    { id:'frogger',      name:'FROGGER',          icon:'🐸', genre:'ARCADE',      color:'#7ab87a', hi:17800  },
+    { id:'asteroids',    name:'ASTEROIDS',        icon:'☄️',  genre:'SHOOTER',     color:'#4ecdc4', hi:88200  },
+    { id:'flappybird',   name:'FLAPPY BIRD',      icon:'🐦', genre:'CASUAL',      color:'#e8a020', hi:147    },
+    { id:'2048',         name:'2048',             icon:'🔢', genre:'PUZZLE',      color:'#c4647a', hi:131072 },
+    { id:'minesweeper',  name:'MINESWEEPER',      icon:'💣', genre:'STRATEGY',    color:'#9b7fc4', hi:99     },
+    { id:'memory',       name:'MEMORY MATCH',     icon:'🃏', genre:'MEMORY',      color:'#c49a4e', hi:500    },
+    { id:'dino',         name:'DINO RUN',         icon:'🦕', genre:'ENDLESS RUN', color:'#7ab87a', hi:3250   },
+    { id:'towerdefense', name:'TOWER DEFENSE',    icon:'🏰', genre:'STRATEGY',    color:'#4ecdc4', hi:72100  },
+    { id:'pinball',      name:'PINBALL',          icon:'⚡', genre:'ARCADE',      color:'#e8a020', hi:185000 },
+    { id:'quiz',         name:'TRIVIA BLAST',     icon:'❓', genre:'QUIZ',        color:'#c4647a', hi:9400   },
+  ];
+
+  const grid = document.getElementById('gameGrid');
+
+  games.forEach(g => {
+    const a = document.createElement('a');
+    a.href = `game.html?id=${g.id}&name=${encodeURIComponent(g.name)}&icon=${encodeURIComponent(g.icon)}&color=${encodeURIComponent(g.color)}`;
+    a.className = 'tile';
+    a.style.setProperty('--tile-color', g.color);
+    a.innerHTML = `
+      <div class="tile-icon">${g.icon}</div>
+      <div class="tile-name">${g.name}</div>
+      <div class="tile-genre">${g.genre}</div>
+      <div class="tile-score">HI-SCORE &nbsp;<span>${g.hi.toLocaleString()}</span></div>
+      <div class="tile-btn">PLAY NOW</div>
+    `;
+    grid.appendChild(a);
+  });
+</script>
+</body>
+</html>
