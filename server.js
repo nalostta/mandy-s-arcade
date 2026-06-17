@@ -4,7 +4,7 @@ const http    = require('http');
 const fs      = require('fs');
 const path    = require('path');
 const os      = require('os');
-const { execFileSync } = require('child_process');
+const AdmZip  = require('adm-zip');
 
 const app      = express();
 const PORT     = process.env.PORT || 3000;
@@ -56,35 +56,41 @@ function download(url, dest) {
 
 // fetch a GitHub repo as a zip and extract it to GAMES_DIR/<id>
 async function fetchRepo(game) {
-  const dest    = path.join(GAMES_DIR, game.id);
-  const zipUrl  = game.repo.replace(/\.git$/, '').replace(/\/$/, '') + '/archive/HEAD.zip';
-  const tmpZip  = path.join(os.tmpdir(), `${game.id}.zip`);
-  const tmpDir  = path.join(os.tmpdir(), `${game.id}_extract`);
+  const dest   = path.join(GAMES_DIR, game.id);
+  const zipUrl = game.repo.replace(/\.git$/, '').replace(/\/$/, '') + '/archive/HEAD.zip';
+  const tmpZip = path.join(os.tmpdir(), `${game.id}_${Date.now()}.zip`);
 
   console.log(`  fetching ${game.id} from ${zipUrl}…`);
-
   await download(zipUrl, tmpZip);
+  console.log(`  extracting ${game.id}…`);
 
-  // clean previous extract
-  if (fs.existsSync(tmpDir)) fs.rmSync(tmpDir, { recursive: true, force: true });
-  fs.mkdirSync(tmpDir, { recursive: true });
+  const zip = new AdmZip(tmpZip);
+  const entries = zip.getEntries();
 
-  // unzip
-  execFileSync('unzip', ['-o', '-q', tmpZip, '-d', tmpDir]);
+  // GitHub zips have a top-level folder like "repo-HEAD/" — find its prefix
+  const prefix = entries
+    .filter(e => e.isDirectory)
+    .map(e => e.entryName)
+    .sort((a, b) => a.length - b.length)[0] || '';
 
-  // GitHub zips extract to <repo>-HEAD/ or <repo>-main/ — find the inner folder
-  const inner = fs.readdirSync(tmpDir).find(f =>
-    fs.statSync(path.join(tmpDir, f)).isDirectory()
-  );
-  if (!inner) throw new Error('zip had no inner directory');
-
-  // move into place
+  // wipe old dest and write fresh
   if (fs.existsSync(dest)) fs.rmSync(dest, { recursive: true, force: true });
-  fs.renameSync(path.join(tmpDir, inner), dest);
+  fs.mkdirSync(dest, { recursive: true });
+
+  entries.forEach(entry => {
+    if (entry.isDirectory) return;
+    // strip the top-level folder prefix
+    const rel    = entry.entryName.startsWith(prefix)
+      ? entry.entryName.slice(prefix.length)
+      : entry.entryName;
+    if (!rel) return;
+    const target = path.join(dest, rel);
+    fs.mkdirSync(path.dirname(target), { recursive: true });
+    fs.writeFileSync(target, entry.getData());
+  });
 
   // cleanup
-  fs.unlinkSync(tmpZip);
-  fs.rmSync(tmpDir, { recursive: true, force: true });
+  try { fs.unlinkSync(tmpZip); } catch {}
 
   console.log(`  ✓ ${game.id} ready at /games/${game.id}/`);
 }
