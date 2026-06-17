@@ -1,0 +1,13 @@
+[
+  {
+    "id": "mocky_bird",
+    "name": "MOCKY BIRD",
+    "repo": "https://github.com/nalostta/mocky_bird.git",
+    "mode": "local",
+    "icon": "🦜",
+    "color": "#c47a5a",
+    "genre": "RAGE INDUCING",
+    "hi": 3,
+    "addedAt": "2026-06-16T00:00:00.000Z"
+  }
+]

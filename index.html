@@ -353,6 +353,101 @@
       71%  { background: var(--purple); }
       85%  { background: var(--amber);  }
     }
+
+    /* ── add-game modal ── */
+    .add-modal {
+      display: none;
+      position: fixed; inset: 0;
+      z-index: 1001;
+      background: rgba(6,6,10,.95);
+      align-items: center;
+      justify-content: center;
+      padding: 1rem;
+    }
+    .add-modal.open { display: flex; }
+    .add-box {
+      background: var(--panel);
+      border: 1px solid #3a3020;
+      border-radius: 6px;
+      padding: 2rem;
+      width: 100%;
+      max-width: 480px;
+      display: flex;
+      flex-direction: column;
+      gap: 1.2rem;
+    }
+    .add-box h2 {
+      font-size: .6rem;
+      color: var(--amber);
+      letter-spacing: .15em;
+    }
+    .add-box label {
+      display: flex;
+      flex-direction: column;
+      gap: .4rem;
+      font-size: .38rem;
+      color: #7a6a4a;
+      letter-spacing: .12em;
+    }
+    .add-box input, .add-box select {
+      font-family: 'Press Start 2P', monospace;
+      font-size: .38rem;
+      background: #0e0c06;
+      border: 1px solid #3a3020;
+      color: var(--cream);
+      padding: .5rem .6rem;
+      outline: none;
+      width: 100%;
+    }
+    .add-box input:focus, .add-box select:focus { border-color: var(--amber); }
+    .add-box select option { background: #1a180e; }
+    .add-row { display: flex; gap: .8rem; }
+    .add-row label { flex: 1; }
+    .add-actions { display: flex; gap: .8rem; justify-content: flex-end; }
+    .add-btn {
+      font-family: 'Press Start 2P', monospace;
+      font-size: .4rem;
+      padding: .55rem 1rem;
+      border: 1px solid #554030;
+      background: transparent;
+      color: #c4947a;
+      cursor: pointer;
+      letter-spacing: .12em;
+      transition: background .15s, color .15s;
+    }
+    .add-btn.primary { border-color: var(--amber); color: var(--amber); }
+    .add-btn:hover { background: #2a1a0a; color: var(--cream); }
+    .add-btn.primary:hover { background: color-mix(in srgb, var(--amber) 15%, transparent); }
+    .add-status { font-size: .36rem; color: #7a6a4a; letter-spacing: .1em; min-height: 1em; }
+    .add-status.err { color: #c4647a; }
+    .add-status.ok  { color: var(--sage); }
+
+    /* add-game tile */
+    .tile-add {
+      border-style: dashed;
+      opacity: .55;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      transition: opacity .2s, transform .2s;
+      min-height: 180px;
+    }
+    .tile-add:hover { opacity: 1; transform: translateY(-4px); }
+    .tile-add-icon { font-size: 2rem; margin-bottom: .5rem; }
+    .tile-add-label { font-size: .45rem; color: var(--cream); letter-spacing: .1em; }
+
+    /* external badge */
+    .tile-ext-badge {
+      position: absolute;
+      top: .5rem; left: .6rem;
+      font-size: .3rem;
+      letter-spacing: .15em;
+      color: #000;
+      background: var(--teal);
+      padding: .18rem .4rem;
+      border-radius: 2px;
+      opacity: .85;
+    }
   </style>
 </head>
 <body>
@@ -383,13 +478,60 @@
 
 <main class="grid" id="gameGrid"></main>
 
-<!-- game modal -->
+<!-- game iframe modal -->
 <div class="game-modal" id="gameModal">
   <div class="modal-bar">
     <span class="modal-title" id="modalTitle">GAME</span>
     <button class="modal-close" id="modalClose">✕ EXIT</button>
   </div>
   <iframe class="modal-frame" id="modalFrame" src="" allowfullscreen></iframe>
+</div>
+
+<!-- add-game modal -->
+<div class="add-modal" id="addModal">
+  <div class="add-box">
+    <h2>+ ADD A GAME</h2>
+
+    <label>GITHUB REPO URL *
+      <input id="ag-repo" type="url" placeholder="https://github.com/user/repo.git" />
+    </label>
+
+    <div class="add-row">
+      <label>DISPLAY NAME
+        <input id="ag-name" type="text" placeholder="MY GAME" />
+      </label>
+      <label>ICON (EMOJI)
+        <input id="ag-icon" type="text" placeholder="🎮" maxlength="4" style="width:5rem" />
+      </label>
+    </div>
+
+    <label>MODE
+      <select id="ag-mode">
+        <option value="local">LOCAL — clone &amp; serve from arcade</option>
+        <option value="iframe">IFRAME — embed an external URL</option>
+        <option value="external">EXTERNAL — redirect to another site</option>
+      </select>
+    </label>
+
+    <label id="ag-url-wrap" style="display:none">EXTERNAL URL
+      <input id="ag-url" type="url" placeholder="https://mygame.com/" />
+    </label>
+
+    <div class="add-row">
+      <label>GENRE
+        <input id="ag-genre" type="text" placeholder="ARCADE" />
+      </label>
+      <label>COLOR
+        <input id="ag-color" type="color" value="#e8a020" style="height:2.2rem;padding:.2rem" />
+      </label>
+    </div>
+
+    <div class="add-status" id="ag-status"></div>
+    <div class="add-actions">
+      <button class="add-btn" id="ag-cancel">CANCEL</button>
+      <button class="add-btn primary" id="ag-submit">ADD GAME ▶</button>
+    </div>
+  </div>
 </div>
 
 <footer>
@@ -402,106 +544,78 @@
 </footer>
 
 <script>
-  // ── starfield (warm tones) ─────────────────────────────────────────────────
+  // ── starfield ─────────────────────────────────────────────────────────────
   (function(){
     const canvas = document.getElementById('stars');
     const ctx = canvas.getContext('2d');
     let stars = [];
-
     function resize(){
       canvas.width  = window.innerWidth;
       canvas.height = document.body.scrollHeight;
-      stars = Array.from({length: 100}, () => ({
-        x: Math.random() * canvas.width,
-        y: Math.random() * canvas.height,
-        r: Math.random() * 1.1 + .25,
-        phase: Math.random() * Math.PI * 2,
-        speed: Math.random() * .012 + .003,
-        warm: Math.random() > .5,
+      stars = Array.from({length:100}, () => ({
+        x:Math.random()*canvas.width, y:Math.random()*canvas.height,
+        r:Math.random()*1.1+.25, phase:Math.random()*Math.PI*2,
+        speed:Math.random()*.012+.003, warm:Math.random()>.5,
       }));
     }
-
     function draw(t){
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      stars.forEach(s => {
-        const alpha = .08 + .35 * (.5 + .5 * Math.sin(t * s.speed + s.phase));
-        ctx.beginPath();
-        ctx.arc(s.x, s.y, s.r, 0, Math.PI*2);
-        ctx.fillStyle = s.warm
-          ? `rgba(232,190,120,${alpha})`
-          : `rgba(180,200,220,${alpha})`;
+      ctx.clearRect(0,0,canvas.width,canvas.height);
+      stars.forEach(s=>{
+        const a=.08+.35*(.5+.5*Math.sin(t*s.speed+s.phase));
+        ctx.beginPath(); ctx.arc(s.x,s.y,s.r,0,Math.PI*2);
+        ctx.fillStyle=s.warm?`rgba(232,190,120,${a})`:`rgba(180,200,220,${a})`;
         ctx.fill();
       });
       requestAnimationFrame(draw);
     }
-
-    window.addEventListener('resize', resize);
-    resize();
-    requestAnimationFrame(draw);
+    window.addEventListener('resize',resize); resize(); requestAnimationFrame(draw);
   })();
 
-  // ── game data ──────────────────────────────────────────────────────────────
-  const MOCKY_BIRD_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="56" height="56">
-    <!-- body -->
-    <ellipse cx="32" cy="38" rx="18" ry="16" fill="#f5c842"/>
-    <!-- head -->
-    <circle cx="32" cy="22" r="14" fill="#f5c842"/>
-    <!-- belly -->
-    <ellipse cx="32" cy="40" rx="11" ry="10" fill="#fde98a"/>
-    <!-- left wing -->
-    <ellipse cx="13" cy="38" rx="7" ry="11" fill="#e0a800" transform="rotate(-20 13 38)"/>
-    <!-- right wing -->
-    <ellipse cx="51" cy="38" rx="7" ry="11" fill="#e0a800" transform="rotate(20 51 38)"/>
-    <!-- tail -->
-    <ellipse cx="32" cy="53" rx="6" ry="5" fill="#e0a800"/>
-    <!-- left eye white -->
-    <circle cx="25" cy="20" r="5.5" fill="white"/>
-    <!-- right eye white -->
-    <circle cx="39" cy="20" r="5.5" fill="white"/>
-    <!-- left pupil -->
-    <circle cx="26" cy="20" r="3" fill="#222"/>
-    <!-- right pupil -->
-    <circle cx="40" cy="20" r="3" fill="#222"/>
-    <!-- eye shine left -->
-    <circle cx="27" cy="18.5" r="1.2" fill="white"/>
-    <!-- eye shine right -->
-    <circle cx="41" cy="18.5" r="1.2" fill="white"/>
-    <!-- smug brow left (angled inward) -->
-    <line x1="21" y1="13" x2="29" y2="16" stroke="#c47a00" stroke-width="2.2" stroke-linecap="round"/>
-    <!-- smug brow right -->
-    <line x1="43" y1="13" x2="35" y2="16" stroke="#c47a00" stroke-width="2.2" stroke-linecap="round"/>
-    <!-- beak -->
-    <polygon points="32,26 27,30 37,30" fill="#ff9900"/>
-    <!-- smug mouth -->
-    <path d="M27 32 Q32 35 37 32" stroke="#c47a00" stroke-width="1.5" fill="none" stroke-linecap="round"/>
-    <!-- blush left -->
-    <ellipse cx="20" cy="26" rx="4" ry="2.5" fill="#ffb347" opacity="0.45"/>
-    <!-- blush right -->
-    <ellipse cx="44" cy="26" rx="4" ry="2.5" fill="#ffb347" opacity="0.45"/>
-  </svg>`;
+  // ── custom SVG icons (keyed by game id) ───────────────────────────────────
+  const CUSTOM_ICONS = {
+    mocky_bird: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="56" height="56">
+      <ellipse cx="32" cy="38" rx="18" ry="16" fill="#f5c842"/>
+      <circle cx="32" cy="22" r="14" fill="#f5c842"/>
+      <ellipse cx="32" cy="40" rx="11" ry="10" fill="#fde98a"/>
+      <ellipse cx="13" cy="38" rx="7" ry="11" fill="#e0a800" transform="rotate(-20 13 38)"/>
+      <ellipse cx="51" cy="38" rx="7" ry="11" fill="#e0a800" transform="rotate(20 51 38)"/>
+      <ellipse cx="32" cy="53" rx="6" ry="5" fill="#e0a800"/>
+      <circle cx="25" cy="20" r="5.5" fill="white"/>
+      <circle cx="39" cy="20" r="5.5" fill="white"/>
+      <circle cx="26" cy="20" r="3" fill="#222"/>
+      <circle cx="40" cy="20" r="3" fill="#222"/>
+      <circle cx="27" cy="18.5" r="1.2" fill="white"/>
+      <circle cx="41" cy="18.5" r="1.2" fill="white"/>
+      <line x1="21" y1="13" x2="29" y2="16" stroke="#c47a00" stroke-width="2.2" stroke-linecap="round"/>
+      <line x1="43" y1="13" x2="35" y2="16" stroke="#c47a00" stroke-width="2.2" stroke-linecap="round"/>
+      <polygon points="32,26 27,30 37,30" fill="#ff9900"/>
+      <path d="M27 32 Q32 35 37 32" stroke="#c47a00" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+      <ellipse cx="20" cy="26" rx="4" ry="2.5" fill="#ffb347" opacity="0.45"/>
+      <ellipse cx="44" cy="26" rx="4" ry="2.5" fill="#ffb347" opacity="0.45"/>
+    </svg>`,
+  };
 
-  const games = [
-    { id:'mockybird',   name:'MOCKY BIRD',        icon:'🦜', customIcon: MOCKY_BIRD_SVG, genre:'RAGE INDUCING', color:'#c47a5a', hi:3, url:'https://nalostta.github.io/mocky_bird/', live:true },
-    { id:'snake',        name:'SNAKE',           icon:'🐍', genre:'CLASSIC',     color:'#7ab87a', hi:8320   },
-    { id:'tetris',       name:'TETRIS',           icon:'🧩', genre:'PUZZLE',      color:'#4ecdc4', hi:124500 },
-    { id:'pacman',       name:'PAC-MAN',          icon:'👾', genre:'MAZE',        color:'#e8a020', hi:99990  },
-    { id:'spaceinvaders',name:'SPACE INVADERS',   icon:'🛸', genre:'SHOOTER',     color:'#c4647a', hi:55160  },
-    { id:'pong',         name:'PONG',             icon:'🏓', genre:'SPORTS',      color:'#9b7fc4', hi:21     },
-    { id:'breakout',     name:'BREAKOUT',         icon:'🧱', genre:'ACTION',      color:'#c49a4e', hi:43220  },
-    { id:'frogger',      name:'FROGGER',          icon:'🐸', genre:'ARCADE',      color:'#7ab87a', hi:17800  },
-    { id:'asteroids',    name:'ASTEROIDS',        icon:'☄️',  genre:'SHOOTER',     color:'#4ecdc4', hi:88200  },
-    { id:'flappybird',   name:'FLAPPY BIRD',      icon:'🐦', genre:'CASUAL',      color:'#e8a020', hi:147    },
-    { id:'2048',         name:'2048',             icon:'🔢', genre:'PUZZLE',      color:'#c4647a', hi:131072 },
-    { id:'minesweeper',  name:'MINESWEEPER',      icon:'💣', genre:'STRATEGY',    color:'#9b7fc4', hi:99     },
-    { id:'memory',       name:'MEMORY MATCH',     icon:'🃏', genre:'MEMORY',      color:'#c49a4e', hi:500    },
-    { id:'dino',         name:'DINO RUN',         icon:'🦕', genre:'ENDLESS RUN', color:'#7ab87a', hi:3250   },
-    { id:'towerdefense', name:'TOWER DEFENSE',    icon:'🏰', genre:'STRATEGY',    color:'#4ecdc4', hi:72100  },
-    { id:'pinball',      name:'PINBALL',          icon:'⚡', genre:'ARCADE',      color:'#e8a020', hi:185000 },
-    { id:'quiz',         name:'TRIVIA BLAST',     icon:'❓', genre:'QUIZ',        color:'#c4647a', hi:9400   },
+  // ── placeholder games (coming soon) ───────────────────────────────────────
+  const PLACEHOLDERS = [
+    { id:'snake',         name:'SNAKE',          icon:'🐍', genre:'CLASSIC',     color:'#7ab87a', hi:8320   },
+    { id:'tetris',        name:'TETRIS',          icon:'🧩', genre:'PUZZLE',      color:'#4ecdc4', hi:124500 },
+    { id:'pacman',        name:'PAC-MAN',         icon:'👾', genre:'MAZE',        color:'#e8a020', hi:99990  },
+    { id:'spaceinvaders', name:'SPACE INVADERS',  icon:'🛸', genre:'SHOOTER',     color:'#c4647a', hi:55160  },
+    { id:'pong',          name:'PONG',            icon:'🏓', genre:'SPORTS',      color:'#9b7fc4', hi:21     },
+    { id:'breakout',      name:'BREAKOUT',        icon:'🧱', genre:'ACTION',      color:'#c49a4e', hi:43220  },
+    { id:'frogger',       name:'FROGGER',         icon:'🐸', genre:'ARCADE',      color:'#7ab87a', hi:17800  },
+    { id:'asteroids',     name:'ASTEROIDS',       icon:'☄️',  genre:'SHOOTER',     color:'#4ecdc4', hi:88200  },
+    { id:'flappybird',    name:'FLAPPY BIRD',     icon:'🐦', genre:'CASUAL',      color:'#e8a020', hi:147    },
+    { id:'2048',          name:'2048',            icon:'🔢', genre:'PUZZLE',      color:'#c4647a', hi:131072 },
+    { id:'minesweeper',   name:'MINESWEEPER',     icon:'💣', genre:'STRATEGY',    color:'#9b7fc4', hi:99     },
+    { id:'memory',        name:'MEMORY MATCH',    icon:'🃏', genre:'MEMORY',      color:'#c49a4e', hi:500    },
+    { id:'dino',          name:'DINO RUN',        icon:'🦕', genre:'ENDLESS RUN', color:'#7ab87a', hi:3250   },
+    { id:'towerdefense',  name:'TOWER DEFENSE',   icon:'🏰', genre:'STRATEGY',    color:'#4ecdc4', hi:72100  },
+    { id:'pinball',       name:'PINBALL',         icon:'⚡', genre:'ARCADE',      color:'#e8a020', hi:185000 },
+    { id:'quiz',          name:'TRIVIA BLAST',    icon:'❓', genre:'QUIZ',        color:'#c4647a', hi:9400   },
   ];
 
-  const grid = document.getElementById('gameGrid');
-
+  // ── iframe modal ──────────────────────────────────────────────────────────
   const modal      = document.getElementById('gameModal');
   const modalFrame = document.getElementById('modalFrame');
   const modalTitle = document.getElementById('modalTitle');
@@ -518,30 +632,130 @@
     modalFrame.src = '';
     document.body.style.overflow = '';
   }
-
   modalClose.addEventListener('click', closeModal);
   modal.addEventListener('click', e => { if (e.target === modal) closeModal(); });
-  document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') { closeModal(); closeAddModal(); } });
 
-  games.forEach(g => {
+  // ── tile renderer ─────────────────────────────────────────────────────────
+  const grid = document.getElementById('gameGrid');
+
+  function makeTile(g) {
     const a = document.createElement('a');
-    const fallbackHref = `game.html?id=${g.id}&name=${encodeURIComponent(g.name)}&icon=${encodeURIComponent(g.icon)}&color=${encodeURIComponent(g.color)}`;
-    a.href = g.live ? '#' : fallbackHref;
     a.className = 'tile';
-    a.style.setProperty('--tile-color', g.color);
+    a.style.setProperty('--tile-color', g.color || '#e8a020');
+
+    const mode = g.mode || 'placeholder';
+    const icon = CUSTOM_ICONS[g.id] || g.icon || '🎮';
+
+    // badge
+    let badge = '';
+    if (mode === 'local' || mode === 'iframe') badge = '<div class="tile-live-badge">● LIVE</div>';
+    if (mode === 'external') badge = '<div class="tile-ext-badge">↗ EXTERNAL</div>';
+
+    const btnLabel = (mode === 'placeholder') ? 'COMING SOON' : 'PLAY NOW';
+
     a.innerHTML = `
-      ${g.live ? '<div class="tile-live-badge">● LIVE</div>' : ''}
-      <div class="tile-icon">${g.customIcon || g.icon}</div>
+      ${badge}
+      <div class="tile-icon">${icon}</div>
       <div class="tile-name">${g.name}</div>
-      <div class="tile-genre">${g.genre}</div>
-      <div class="tile-score">HI-SCORE &nbsp;<span>${g.hi.toLocaleString()}</span></div>
-      <div class="tile-btn">${g.live ? 'PLAY NOW' : 'COMING SOON'}</div>
+      <div class="tile-genre">${g.genre || 'ARCADE'}</div>
+      <div class="tile-score">HI-SCORE &nbsp;<span>${(g.hi||0).toLocaleString()}</span></div>
+      <div class="tile-btn">${btnLabel}</div>
     `;
-    if (g.live && g.url) {
+
+    if (mode === 'local') {
+      const url = `/games/${g.id}/`;
+      a.href = '#';
+      a.addEventListener('click', e => { e.preventDefault(); openModal(g.name, url); });
+    } else if (mode === 'iframe') {
+      a.href = '#';
       a.addEventListener('click', e => { e.preventDefault(); openModal(g.name, g.url); });
+    } else if (mode === 'external') {
+      a.href = g.url;
+      a.target = '_blank';
+    } else {
+      // placeholder
+      const fb = `game.html?id=${g.id}&name=${encodeURIComponent(g.name)}&icon=${encodeURIComponent(g.icon||'🎮')}&color=${encodeURIComponent(g.color||'#e8a020')}`;
+      a.href = fb;
     }
-    grid.appendChild(a);
+
+    return a;
+  }
+
+  // ── load live games from API, then render all ─────────────────────────────
+  async function renderGrid() {
+    grid.innerHTML = '';
+    let liveGames = [];
+    try {
+      const res = await fetch('/api/games');
+      if (res.ok) liveGames = await res.json();
+    } catch { /* server not running locally — skip */ }
+
+    // live games first
+    liveGames.forEach(g => grid.appendChild(makeTile(g)));
+    // then placeholders (skip any id already shown as live)
+    const liveIds = new Set(liveGames.map(g => g.id));
+    PLACEHOLDERS.filter(g => !liveIds.has(g.id)).forEach(g => grid.appendChild(makeTile(g)));
+    // add-game tile last
+    grid.appendChild(makeAddTile());
+  }
+
+  function makeAddTile() {
+    const a = document.createElement('a');
+    a.href = '#';
+    a.className = 'tile tile-add';
+    a.style.setProperty('--tile-color', '#7a6a4a');
+    a.innerHTML = `<div class="tile-add-icon">＋</div><div class="tile-add-label">ADD A GAME</div>`;
+    a.addEventListener('click', e => { e.preventDefault(); openAddModal(); });
+    return a;
+  }
+
+  // ── add-game modal ────────────────────────────────────────────────────────
+  const addModal  = document.getElementById('addModal');
+  const agMode    = document.getElementById('ag-mode');
+  const agUrlWrap = document.getElementById('ag-url-wrap');
+  const agStatus  = document.getElementById('ag-status');
+
+  agMode.addEventListener('change', () => {
+    agUrlWrap.style.display = (agMode.value !== 'local') ? 'flex' : 'none';
   });
+
+  function openAddModal()  { addModal.classList.add('open'); document.body.style.overflow = 'hidden'; }
+  function closeAddModal() { addModal.classList.remove('open'); document.body.style.overflow = ''; agStatus.textContent = ''; agStatus.className = 'add-status'; }
+
+  document.getElementById('ag-cancel').addEventListener('click', closeAddModal);
+  addModal.addEventListener('click', e => { if (e.target === addModal) closeAddModal(); });
+
+  document.getElementById('ag-submit').addEventListener('click', async () => {
+    const repo  = document.getElementById('ag-repo').value.trim();
+    const name  = document.getElementById('ag-name').value.trim();
+    const icon  = document.getElementById('ag-icon').value.trim() || '🎮';
+    const color = document.getElementById('ag-color').value;
+    const genre = document.getElementById('ag-genre').value.trim() || 'ARCADE';
+    const mode  = agMode.value;
+    const url   = document.getElementById('ag-url').value.trim();
+
+    if (!repo) { agStatus.textContent = 'Repo URL is required.'; agStatus.className = 'add-status err'; return; }
+    if (mode !== 'local' && !url) { agStatus.textContent = 'External URL is required for this mode.'; agStatus.className = 'add-status err'; return; }
+
+    agStatus.textContent = 'Registering…'; agStatus.className = 'add-status';
+
+    try {
+      const res = await fetch('/api/games', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ repo, name, icon, color, genre, mode, url }),
+      });
+      const data = await res.json();
+      if (!res.ok) { agStatus.textContent = data.error || 'Error.'; agStatus.className = 'add-status err'; return; }
+      agStatus.textContent = '✓ Added! Refreshing…'; agStatus.className = 'add-status ok';
+      setTimeout(() => { closeAddModal(); renderGrid(); }, 800);
+    } catch (e) {
+      agStatus.textContent = 'Could not reach server.'; agStatus.className = 'add-status err';
+    }
+  });
+
+  renderGrid();
 </script>
 </body>
 </html>
