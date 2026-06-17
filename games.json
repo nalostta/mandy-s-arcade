@@ -10,4 +10,17 @@
     "hi": 3,
     "addedAt": "2026-06-16T00:00:00.000Z"
   }
+,
+  {
+    "id": "wordle",
+    "name": "WORDLE",
+    "repo": "https://github.com/nalostta/wordle.git",
+    "mode": "iframe",
+    "url": "https://arcade-wordle-ae1f88a03a04.herokuapp.com/",
+    "icon": "🟩",
+    "color": "#538d4e",
+    "genre": "WORD GAME",
+    "hi": 0,
+    "addedAt": "2026-06-16T00:00:00.000Z"
+  }
 ]
