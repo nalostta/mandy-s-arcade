@@ -1,12 +1,18 @@
-const express  = require('express');
-const { execSync, execFileSync } = require('child_process');
-const fs   = require('fs');
-const path = require('path');
+const express = require('express');
+const https   = require('https');
+const http    = require('http');
+const fs      = require('fs');
+const path    = require('path');
+const os      = require('os');
+const { execFileSync } = require('child_process');
 
 const app      = express();
 const PORT     = process.env.PORT || 3000;
 const GAMES_FILE = path.join(__dirname, 'games.json');
 const GAMES_DIR  = path.join(__dirname, 'public', 'games');
+
+const cloning = new Set();   // games currently being fetched
+const failed  = new Set();   // games that failed to fetch
 
 app.use(express.json());
 
@@ -23,54 +29,134 @@ function saveRegistry(games) {
 }
 
 function idFromRepo(repoUrl) {
-  return repoUrl
-    .replace(/\.git$/, '')
-    .split('/')
-    .pop()
-    .toLowerCase()
-    .replace(/[^a-z0-9_-]/g, '_');
+  return repoUrl.replace(/\.git$/, '').split('/').pop()
+    .toLowerCase().replace(/[^a-z0-9_-]/g, '_');
 }
 
-function cloneOrPull(game) {
-  const dest = path.join(GAMES_DIR, game.id);
-  if (fs.existsSync(path.join(dest, '.git'))) {
-    console.log(`  pulling ${game.id}…`);
-    execFileSync('git', ['-C', dest, 'pull', '--ff-only'], { timeout: 30_000 });
-  } else {
-    fs.mkdirSync(dest, { recursive: true });
-    console.log(`  cloning ${game.id} from ${game.repo}…`);
-    execFileSync('git', ['clone', '--depth', '1', game.repo, dest], { timeout: 60_000 });
-  }
+// download a URL to a file, following redirects
+function download(url, dest) {
+  return new Promise((resolve, reject) => {
+    const file = fs.createWriteStream(dest);
+    const get  = url.startsWith('https') ? https.get : http.get;
+    get(url, res => {
+      if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+        file.close();
+        fs.unlinkSync(dest);
+        return download(res.headers.location, dest).then(resolve).catch(reject);
+      }
+      if (res.statusCode !== 200) {
+        file.close();
+        return reject(new Error(`HTTP ${res.statusCode} for ${url}`));
+      }
+      res.pipe(file);
+      file.on('finish', () => file.close(resolve));
+    }).on('error', err => { file.close(); reject(err); });
+  });
+}
+
+// fetch a GitHub repo as a zip and extract it to GAMES_DIR/<id>
+async function fetchRepo(game) {
+  const dest    = path.join(GAMES_DIR, game.id);
+  const zipUrl  = game.repo.replace(/\.git$/, '').replace(/\/$/, '') + '/archive/HEAD.zip';
+  const tmpZip  = path.join(os.tmpdir(), `${game.id}.zip`);
+  const tmpDir  = path.join(os.tmpdir(), `${game.id}_extract`);
+
+  console.log(`  fetching ${game.id} from ${zipUrl}…`);
+
+  await download(zipUrl, tmpZip);
+
+  // clean previous extract
+  if (fs.existsSync(tmpDir)) fs.rmSync(tmpDir, { recursive: true, force: true });
+  fs.mkdirSync(tmpDir, { recursive: true });
+
+  // unzip
+  execFileSync('unzip', ['-o', '-q', tmpZip, '-d', tmpDir]);
+
+  // GitHub zips extract to <repo>-HEAD/ or <repo>-main/ — find the inner folder
+  const inner = fs.readdirSync(tmpDir).find(f =>
+    fs.statSync(path.join(tmpDir, f)).isDirectory()
+  );
+  if (!inner) throw new Error('zip had no inner directory');
+
+  // move into place
+  if (fs.existsSync(dest)) fs.rmSync(dest, { recursive: true, force: true });
+  fs.renameSync(path.join(tmpDir, inner), dest);
+
+  // cleanup
+  fs.unlinkSync(tmpZip);
+  fs.rmSync(tmpDir, { recursive: true, force: true });
+
   console.log(`  ✓ ${game.id} ready at /games/${game.id}/`);
 }
 
-// ── startup: clone all registered games ───────────────────────────────────
+async function fetchAsync(game) {
+  cloning.add(game.id);
+  failed.delete(game.id);
+  try {
+    await fetchRepo(game);
+  } catch (e) {
+    console.error(`  ✗ failed to fetch ${game.id}:`, e.message);
+    failed.add(game.id);
+    // clean up partial dest so next retry starts fresh
+    const dest = path.join(GAMES_DIR, game.id);
+    if (fs.existsSync(dest)) fs.rmSync(dest, { recursive: true, force: true });
+  } finally {
+    cloning.delete(game.id);
+  }
+}
 
-fs.mkdirSync(GAMES_DIR, { recursive: true });
+// ── middleware: loading / error page while game is fetching ───────────────
 
-const registry = loadRegistry();
-registry.forEach(g => {
-  try { cloneOrPull(g); }
-  catch (e) { console.error(`  ✗ failed to clone ${g.id}:`, e.message); }
+app.use('/games/:id/', (req, res, next) => {
+  const { id } = req.params;
+  if (req.path !== '/') return next();
+
+  if (cloning.has(id)) {
+    return res.send(`<!DOCTYPE html><html><head>
+      <meta http-equiv="refresh" content="3">
+      <style>body{background:#111008;color:#e8a020;font-family:monospace;display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;margin:0;gap:1rem;}
+      p{font-size:1rem;} small{color:#5a4a2a;font-size:.7rem;}</style>
+      </head><body>
+      <p>⏳ Loading <strong>${id.replace(/_/g,' ')}</strong>…</p>
+      <small>Refreshing in 3 s</small>
+      </body></html>`);
+  }
+
+  if (failed.has(id)) {
+    return res.status(500).send(`<!DOCTYPE html><html><head>
+      <style>body{background:#111008;color:#c4647a;font-family:monospace;display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;margin:0;gap:1rem;}
+      button{font-family:monospace;background:transparent;border:1px solid #c4647a;color:#c4647a;padding:.5rem 1rem;cursor:pointer;}</style>
+      </head><body>
+      <p>✗ Failed to load <strong>${id.replace(/_/g,' ')}</strong></p>
+      <button onclick="fetch('/api/games/${id}/retry',{method:'POST'}).then(()=>location.reload())">RETRY</button>
+      </body></html>`);
+  }
+
+  next();
 });
 
 // ── static serving ─────────────────────────────────────────────────────────
 
-// serve cloned game directories
 app.use('/games', express.static(GAMES_DIR));
-
-// serve arcade root files (index.html, game.html, etc.)
 app.use(express.static(__dirname, { index: 'index.html' }));
 
 // ── API ────────────────────────────────────────────────────────────────────
 
-// GET /api/games  — return current registry
-app.get('/api/games', (req, res) => {
-  res.json(loadRegistry());
+app.get('/api/games', (req, res) => res.json(loadRegistry()));
+
+app.get('/api/games/status', (req, res) => {
+  res.json({ cloning: [...cloning], failed: [...failed] });
 });
 
-// POST /api/games  — register + clone a new game
-// Body: { repo, name?, id?, icon?, color?, genre? }
+// retry a failed game
+app.post('/api/games/:id/retry', (req, res) => {
+  const game = loadRegistry().find(g => g.id === req.params.id);
+  if (!game) return res.status(404).json({ error: 'not found' });
+  if (cloning.has(game.id)) return res.json({ status: 'already cloning' });
+  fetchAsync(game);
+  res.json({ status: 'retrying' });
+});
+
 app.post('/api/games', (req, res) => {
   const { repo, name, id, icon, color, genre } = req.body || {};
 
@@ -78,8 +164,8 @@ app.post('/api/games', (req, res) => {
     return res.status(400).json({ error: 'Valid repo URL required (https://…)' });
   }
 
-  const gameId = (id || idFromRepo(repo)).toLowerCase().replace(/[^a-z0-9_-]/g, '_');
-  const games  = loadRegistry();
+  const gameId   = (id || idFromRepo(repo)).toLowerCase().replace(/[^a-z0-9_-]/g, '_');
+  const games    = loadRegistry();
 
   if (games.find(g => g.id === gameId)) {
     return res.status(409).json({ error: `Game "${gameId}" is already registered.` });
@@ -93,34 +179,27 @@ app.post('/api/games', (req, res) => {
   }
 
   const entry = {
-    id:    gameId,
-    name:  (name || gameId.replace(/_/g, ' ').toUpperCase()).toUpperCase(),
-    repo,
-    mode:  gameMode,
-    url:   gameUrl,
-    icon:  icon  || '🎮',
-    color: color || '#e8a020',
+    id: gameId,
+    name: (name || gameId.replace(/_/g, ' ').toUpperCase()).toUpperCase(),
+    repo, mode: gameMode, url: gameUrl,
+    icon: icon || '🎮', color: color || '#e8a020',
     genre: (genre || 'ARCADE').toUpperCase(),
-    hi:    0,
-    addedAt: new Date().toISOString(),
+    hi: 0, addedAt: new Date().toISOString(),
   };
-
-  if (gameMode === 'local') {
-    try {
-      cloneOrPull(entry);
-    } catch (e) {
-      return res.status(500).json({ error: `Clone failed: ${e.message}` });
-    }
-  }
 
   games.push(entry);
   saveRegistry(games);
 
-  res.status(201).json({ ok: true, game: entry, url: `/games/${gameId}/` });
+  if (gameMode === 'local') fetchAsync(entry);
+
+  res.status(201).json({ ok: true, game: entry, status: gameMode === 'local' ? 'fetching' : 'ready' });
 });
 
-// ── start ──────────────────────────────────────────────────────────────────
+// ── boot ──────────────────────────────────────────────────────────────────
+
+fs.mkdirSync(GAMES_DIR, { recursive: true });
 
 app.listen(PORT, () => {
   console.log(`🕹  Mandy's Arcade running at http://localhost:${PORT}`);
+  loadRegistry().filter(g => g.mode === 'local').forEach(g => fetchAsync(g));
 });
